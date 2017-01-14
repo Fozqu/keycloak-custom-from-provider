@@ -1,5 +1,19 @@
 package org.prsq.providers.auth;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.apache.http.NameValuePair;
+import org.apache.http.client.ResponseHandler;
+import org.apache.http.client.entity.UrlEncodedFormEntity;
+import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.entity.StringEntity;
+import org.apache.http.impl.client.BasicResponseHandler;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.message.BasicNameValuePair;
 import org.keycloak.Config;
 import org.keycloak.authentication.FormAction;
 import org.keycloak.authentication.FormActionFactory;
@@ -13,6 +27,8 @@ import org.keycloak.provider.ProviderConfigProperty;
 import org.keycloak.services.validation.Validation;
 
 import javax.ws.rs.core.MultivaluedMap;
+import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -23,6 +39,8 @@ import java.util.regex.Pattern;
  * @author Serhii Morunov
  */
 public class WebsiteRegistration implements FormAction, FormActionFactory {
+
+    private static String TOKEN_URL = "https://sso.lab.competify.com/auth/realms/pstest/protocol/openid-connect/token";
 
     private static String FIELD_WEBSITE = "user.attributes.website";
 
@@ -73,6 +91,16 @@ public class WebsiteRegistration implements FormAction, FormActionFactory {
         if (users.size() > 0) {
             errors.add(new FormMessage(FIELD_WEBSITE, "User with such website address already exists"));
         }
+        try {
+            if (isShopExist(cleanURL(website))) {
+                errors.add(new FormMessage(FIELD_WEBSITE, "User with such website address already exists"));
+            }
+        } catch (IOException e) {
+            errors.add(new FormMessage(FIELD_WEBSITE, "Error during registration process Please contact support"));
+            e.printStackTrace();
+        }
+
+
         if (errors.size() > 0) {
             context.validationError(formData, errors);
         } else {
@@ -129,5 +157,44 @@ public class WebsiteRegistration implements FormAction, FormActionFactory {
 
     private String cleanURL(String dirty) {
         return dirty.replaceAll("((https|http):\\/\\/)|www\\.", "").replaceAll("(\\/(.+))$", "");
+    }
+
+    private boolean isShopExist(String website) throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        CloseableHttpClient httpclient = HttpClients.createDefault();
+        ResponseHandler<String> handler = new BasicResponseHandler();
+
+        HttpPost httpPost = new HttpPost("https://sso.lab.competify.com/auth/realms/pstest/protocol/openid-connect/token");
+        List<NameValuePair> pairs = new ArrayList<>();
+        pairs.add(new BasicNameValuePair("username", "WEBAPI"));
+        pairs.add(new BasicNameValuePair("password", "WEBAPI25"));
+        pairs.add(new BasicNameValuePair("grant_type", "password"));
+        pairs.add(new BasicNameValuePair("client_id", "curl"));
+        httpPost.setEntity(new UrlEncodedFormEntity(pairs));
+        CloseableHttpResponse response = httpclient.execute(httpPost);
+        String body = handler.handleResponse(response);
+        JsonNode responceNode = mapper.readTree(body);
+        String acssess_token = responceNode.get("access_token").asText();
+
+        ArrayNode filter = mapper.createArrayNode();
+        ObjectNode webshopFilter = mapper.createObjectNode();
+        webshopFilter.put("field", "webshop");
+        webshopFilter.put("op", "EQ");
+        webshopFilter.put("value", website);
+        filter.add(webshopFilter);
+
+        ObjectNode request = mapper.createObjectNode();
+        request.put("filter", filter);
+
+        HttpPost webshopPost = new HttpPost("http://localhost:8080/prsq-app-admin/rest/1.0/scanProject/list");
+        StringEntity entity = new StringEntity(request.toString());
+        webshopPost.setEntity(entity);
+        webshopPost.setHeader("Accept", "application/json");
+        webshopPost.setHeader("Content-type", "application/json");
+        webshopPost.setHeader("Authorization", "Bearer " + acssess_token);
+        CloseableHttpResponse webshopResponce = httpclient.execute(webshopPost);
+        String webshopBody = handler.handleResponse(webshopResponce);
+        ArrayNode webshops = (ArrayNode) mapper.readTree(webshopBody).get("items");
+        return webshops.size() > 0;
     }
 }
