@@ -77,9 +77,9 @@ public class WebsiteRegistration implements FormAction, FormActionFactory {
     public void validate(ValidationContext context) {
         MultivaluedMap formData = context.getHttpRequest().getDecodedFormParameters();
         ArrayList errors = new ArrayList();
-        String website = (String)formData.getFirst(FIELD_WEBSITE);
+        String website = (String) formData.getFirst(FIELD_WEBSITE);
         List users = context.getSession().users().searchForUserByUserAttribute(ATTRIBUTE_WEBSITE, this.cleanURL(website), context.getRealm());
-        if(errors.size() > 0) {
+        if (errors.size() > 0) {
             context.validationError(formData, errors);
         } else {
             context.success();
@@ -94,20 +94,20 @@ public class WebsiteRegistration implements FormAction, FormActionFactory {
 
         UserModel user = context.getUser();
         MultivaluedMap formData = context.getHttpRequest().getDecodedFormParameters();
-        String website = this.cleanURL((String)formData.getFirst(FIELD_WEBSITE));
+        String website = this.cleanURL((String) formData.getFirst(FIELD_WEBSITE));
 
-        String sellerName = this.cleanURL((String)formData.getFirst(FIELD_SELLER_NAME));
+        String sellerName = this.cleanURL((String) formData.getFirst(FIELD_SELLER_NAME));
 
-        String marketplace = this.cleanURL((String)formData.getFirst(FIELD_MARKETPLACE));
+        String marketplace = this.cleanURL((String) formData.getFirst(FIELD_MARKETPLACE));
 
 
-        if(!StringUtils.isBlank(website)){
+        if (!StringUtils.isBlank(website)) {
             user.setSingleAttribute("website", website);
-        }else if(!StringUtils.isBlank(sellerName)){
+        } else if (!StringUtils.isBlank(sellerName)) {
             user.setSingleAttribute("website", sellerName + "@" + marketplace);
         }
 
-        user.setSingleAttribute("activationCode", Integer.toString(random.nextInt(high-low)+low));
+        user.setSingleAttribute("activationCode", Integer.toString(random.nextInt(high - low) + low));
     }
 
     public boolean requiresUser() {
@@ -171,8 +171,8 @@ public class WebsiteRegistration implements FormAction, FormActionFactory {
         webshopPost.setHeader("Content-type", "application/json");
         webshopPost.setHeader("Authorization", "Bearer " + accessTokenGeneration());
         CloseableHttpResponse webshopResponce = httpclient.execute(webshopPost);
-        String webshopBody = (String)handler.handleResponse(webshopResponce);
-        ArrayNode webshops = (ArrayNode)mapper.readTree(webshopBody).get("items");
+        String webshopBody = (String) handler.handleResponse(webshopResponce);
+        ArrayNode webshops = (ArrayNode) mapper.readTree(webshopBody).get("items");
         return webshops.size() > 0;
     }
 
@@ -193,7 +193,7 @@ public class WebsiteRegistration implements FormAction, FormActionFactory {
         pairs.add(new BasicNameValuePair("client_id", "curl"));
         httpPost.setEntity(new UrlEncodedFormEntity(pairs));
         CloseableHttpResponse response = httpclient.execute(httpPost);
-        String body = (String)handler.handleResponse(response);
+        String body = (String) handler.handleResponse(response);
         JsonNode responceNode = mapper.readTree(body);
 
         return responceNode.get("access_token").asText();
@@ -201,10 +201,11 @@ public class WebsiteRegistration implements FormAction, FormActionFactory {
 
     /**
      * SellerName validation
+     *
      * @param sellerName
      * @return if seller name is unique return true
      */
-    public boolean isSellerNameUnique(String sellerName) throws  IOException {
+    public boolean isSellerNameUnique(String sellerName) throws IOException {
 
         HttpPost httpPost = new HttpPost(PRICEDB_HOST + "/prsq-app-dashboard-2.0/rest/1.0/dashboard/user/seller_name_validation");
 
@@ -215,12 +216,11 @@ public class WebsiteRegistration implements FormAction, FormActionFactory {
         httpPost.setHeader("Authorization", "Bearer " + accessTokenGeneration());
 
         return Boolean.parseBoolean(new BasicResponseHandler().handleResponse(HttpClientBuilder.create().build().execute(httpPost)));
-
-
     }
 
     /**
      * Get all marketplaces
+     *
      * @param sellerName
      * @return if seller name is unique return true
      */
@@ -233,7 +233,5 @@ public class WebsiteRegistration implements FormAction, FormActionFactory {
         httpGet.setHeader("Authorization", "Bearer " + accessTokenGeneration());
 
         return null;
-
-
     }
 }
