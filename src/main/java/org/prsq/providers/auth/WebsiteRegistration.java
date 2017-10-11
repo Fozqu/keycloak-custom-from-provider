@@ -4,12 +4,15 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.apache.commons.lang.StringUtils;
 import org.apache.http.client.entity.UrlEncodedFormEntity;
 import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.BasicResponseHandler;
 import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.message.BasicNameValuePair;
 import org.keycloak.Config.Scope;
@@ -36,6 +39,8 @@ import java.util.Random;
  * @author Serhii Morunov
  */
 public class WebsiteRegistration implements FormAction, FormActionFactory {
+    private static final String FIELD_SELLER_NAME = "user.attribute.seller_name";
+    private static final String FIELD_MARKETPLACE = "user.attribute.marketplace";
     private static String TOKEN_URL = "https://sso.lab.competify.com/auth/realms/pstest/protocol/openid-connect/token";
     private static String FIELD_WEBSITE = "user.attributes.website";
     private static String PRICEDB_HOST = "http://test.pricesquid.com:8080";
@@ -90,7 +95,18 @@ public class WebsiteRegistration implements FormAction, FormActionFactory {
         UserModel user = context.getUser();
         MultivaluedMap formData = context.getHttpRequest().getDecodedFormParameters();
         String website = this.cleanURL((String)formData.getFirst(FIELD_WEBSITE));
-        user.setSingleAttribute("website", website);
+
+        String sellerName = this.cleanURL((String)formData.getFirst(FIELD_SELLER_NAME));
+
+        String marketplace = this.cleanURL((String)formData.getFirst(FIELD_MARKETPLACE));
+
+
+        if(!StringUtils.isBlank(website)){
+            user.setSingleAttribute("website", website);
+        }else if(!StringUtils.isBlank(sellerName)){
+            user.setSingleAttribute("website", sellerName + "@" + marketplace);
+        }
+
         user.setSingleAttribute("activationCode", Integer.toString(random.nextInt(high-low)+low));
     }
 
@@ -139,17 +155,7 @@ public class WebsiteRegistration implements FormAction, FormActionFactory {
         ObjectMapper mapper = new ObjectMapper();
         CloseableHttpClient httpclient = HttpClients.createDefault();
         BasicResponseHandler handler = new BasicResponseHandler();
-        HttpPost httpPost = new HttpPost("https://sso.lab.competify.com/auth/realms/pstest/protocol/openid-connect/token");
-        ArrayList pairs = new ArrayList();
-        pairs.add(new BasicNameValuePair("username", "WEBAPI"));
-        pairs.add(new BasicNameValuePair("password", "WEBAPI25"));
-        pairs.add(new BasicNameValuePair("grant_type", "password"));
-        pairs.add(new BasicNameValuePair("client_id", "curl"));
-        httpPost.setEntity(new UrlEncodedFormEntity(pairs));
-        CloseableHttpResponse response = httpclient.execute(httpPost);
-        String body = (String)handler.handleResponse(response);
-        JsonNode responceNode = mapper.readTree(body);
-        String acssess_token = responceNode.get("access_token").asText();
+
         ArrayNode filter = mapper.createArrayNode();
         ObjectNode webshopFilter = mapper.createObjectNode();
         webshopFilter.put("field", "webshop");
@@ -163,7 +169,7 @@ public class WebsiteRegistration implements FormAction, FormActionFactory {
         webshopPost.setEntity(entity);
         webshopPost.setHeader("Accept", "application/json");
         webshopPost.setHeader("Content-type", "application/json");
-        webshopPost.setHeader("Authorization", "Bearer " + acssess_token);
+        webshopPost.setHeader("Authorization", "Bearer " + accessTokenGeneration());
         CloseableHttpResponse webshopResponce = httpclient.execute(webshopPost);
         String webshopBody = (String)handler.handleResponse(webshopResponce);
         ArrayNode webshops = (ArrayNode)mapper.readTree(webshopBody).get("items");
@@ -173,5 +179,61 @@ public class WebsiteRegistration implements FormAction, FormActionFactory {
     static {
         REQUIREMENT_CHOISES = new Requirement[]{Requirement.REQUIRED, Requirement.DISABLED};
         System.out.println("Website validator provider loaded...");
+    }
+
+    public String accessTokenGeneration() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        CloseableHttpClient httpclient = HttpClients.createDefault();
+        BasicResponseHandler handler = new BasicResponseHandler();
+        HttpPost httpPost = new HttpPost("https://sso.lab.competify.com/auth/realms/pstest/protocol/openid-connect/token");
+        ArrayList pairs = new ArrayList();
+        pairs.add(new BasicNameValuePair("username", "WEBAPI"));
+        pairs.add(new BasicNameValuePair("password", "WEBAPI25"));
+        pairs.add(new BasicNameValuePair("grant_type", "password"));
+        pairs.add(new BasicNameValuePair("client_id", "curl"));
+        httpPost.setEntity(new UrlEncodedFormEntity(pairs));
+        CloseableHttpResponse response = httpclient.execute(httpPost);
+        String body = (String)handler.handleResponse(response);
+        JsonNode responceNode = mapper.readTree(body);
+
+        return responceNode.get("access_token").asText();
+    }
+
+    /**
+     * SellerName validation
+     * @param sellerName
+     * @return if seller name is unique return true
+     */
+    public boolean isSellerNameUnique(String sellerName) throws  IOException {
+
+        HttpPost httpPost = new HttpPost(PRICEDB_HOST + "/prsq-app-dashboard-2.0/rest/1.0/dashboard/user/seller_name_validation");
+
+        httpPost.setEntity(new StringEntity(sellerName));
+
+        httpPost.setHeader("Accept", "application/json");
+        httpPost.setHeader("Content-type", "application/json");
+        httpPost.setHeader("Authorization", "Bearer " + accessTokenGeneration());
+
+        return Boolean.parseBoolean(new BasicResponseHandler().handleResponse(HttpClientBuilder.create().build().execute(httpPost)));
+
+
+    }
+
+    /**
+     * Get all marketplaces
+     * @param sellerName
+     * @return if seller name is unique return true
+     */
+    public List<String> getAllMarketplaces(String sellerName) throws IOException {
+
+        HttpGet httpGet = new HttpGet(PRICEDB_HOST + "/prsq-app-dashboard-2.0/rest/1.0/dashboard/marketplaces");
+
+        httpGet.setHeader("Accept", "application/json");
+        httpGet.setHeader("Content-type", "application/json");
+        httpGet.setHeader("Authorization", "Bearer " + accessTokenGeneration());
+
+        return null;
+
+
     }
 }
